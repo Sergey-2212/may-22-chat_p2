@@ -8,7 +8,6 @@ import javafx.fxml.Initializable;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextArea;
@@ -80,8 +79,15 @@ public class ChatController implements Initializable, MessageProcessor {
         System.out.println("mock");
     }
 
+    public NetworkService getNetworkService() {
+        return networkService;
+    }
+
+
     public void closeApplication(ActionEvent actionEvent) {
-        Platform.exit();
+        closeSession();
+
+
     }
 
     public void sendMessage(ActionEvent actionEvent) {
@@ -111,6 +117,16 @@ public class ChatController implements Initializable, MessageProcessor {
         alert.showAndWait();
     }
 
+    private void showCloseWarning() {
+        Alert alert = new Alert(
+                Alert.AlertType.WARNING,
+                "Session closed, please restart the client",
+                ButtonType.CLOSE
+        );
+        alert.showAndWait();
+        closeSession();
+    }
+
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         networkService = new NetworkService(this);
@@ -122,23 +138,35 @@ public class ChatController implements Initializable, MessageProcessor {
         Platform.runLater(() -> parseMessage(message));
     }
 
-    private void parseMessage(String message) {
+    private void parseMessage(String message)  {
         String[] split = message.split(REGEX);
         Command command = Command.getByCommand(split[0]);
 
-        switch (command) {
-            case AUTH_OK -> authOk(split);
-            case ERROR_MESSAGE -> showError(split[1]);
-            case LIST_USERS -> parseUsers(split);
-            case CHANGE_NICK_OK -> handleChangeNick(split[1]);
-            default -> chatArea.appendText(split[1] + System.lineSeparator());
-        }
+            switch (command) {
+                case AUTH_OK -> authOk(split);
+                case ERROR_MESSAGE -> showError(split[1]);
+                case LIST_USERS -> parseUsers(split);
+                case CHANGE_NICK_OK -> handleChangeNick(split[1]);
+                case CLOSE_SESSION_MESSAGE -> showCloseWarning(); // Сообщение о закрытии
+                default -> chatArea.appendText(split[1] + System.lineSeparator());
+            }
     }
 
     private void handleChangeNick(String newNick) {
         user = newNick;
         returnToChat(null);
     }
+
+    private void closeSession() {
+        try {
+            networkService.shutdown();
+            Platform.exit();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+   }
+
+
 
     private void parseUsers(String[] split) {
         List<String> contact = new ArrayList<>(Arrays.asList(split));
