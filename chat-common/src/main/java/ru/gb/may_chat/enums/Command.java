@@ -10,7 +10,8 @@ public enum Command {
     AUTH_OK("/auth-ok"),
     CHANGE_NICK("/change-nick"),
     CHANGE_NICK_OK("/change-nick-ok"),
-    ERROR_MESSAGE("/error");
+    ERROR_MESSAGE("/error"),
+    CLOSE_SESSION_MESSAGE("/close");
 
     private String command;
 

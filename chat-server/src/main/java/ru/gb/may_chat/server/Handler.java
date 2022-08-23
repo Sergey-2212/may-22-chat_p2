@@ -9,6 +9,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.SocketException;
 
 import static ru.gb.may_chat.constants.MessageConstants.REGEX;
 import static ru.gb.may_chat.enums.Command.AUTH_MESSAGE;
@@ -25,6 +26,7 @@ public class Handler {
     private Thread handlerThread;
     private Server server;
     private String user;
+    private boolean isAuthorized;
 
     public Handler(Socket socket, Server server) {
         try {
@@ -32,7 +34,8 @@ public class Handler {
             this.socket = socket;
             this.in = new DataInputStream(socket.getInputStream());
             this.out = new DataOutputStream(socket.getOutputStream());
-            System.out.println("Handler created");
+            this.isAuthorized = false;
+            System.out.println("Handler is created");
         } catch (IOException e) {
             System.err.println("Connection problems with user: " + user);
         }
@@ -41,7 +44,9 @@ public class Handler {
     public void handle() {
         handlerThread = new Thread(() -> {
             authorize();
-            System.out.println("Auth done");
+            if (!Thread.currentThread().isInterrupted() && !socket.isClosed()) {
+                System.out.println("Auth done");
+            }
             while (!Thread.currentThread().isInterrupted() && !socket.isClosed()) {
                 try {
                     String message = in.readUTF();
@@ -49,6 +54,7 @@ public class Handler {
                 } catch (IOException e) {
                     System.out.println("Connection broken with client: " + user);
                     server.removeHandler(this);
+                    Thread.currentThread().interrupt();
                 }
             }
         });
@@ -80,7 +86,10 @@ public class Handler {
 
     private void authorize() {
         System.out.println("Authorizing");
-
+        Thread daemon = new Thread(new DaemonThread());
+        daemon.setDaemon(true);
+        daemon.start();
+        System.out.println("Daemon started");
         try {
             while (!socket.isClosed()) {
                 String msg = in.readUTF();
@@ -108,12 +117,14 @@ public class Handler {
                         this.user = nickname;
                         send(AUTH_OK.getCommand() + REGEX + nickname);
                         server.addHandler(this);
+                        this.isAuthorized = true;
                         break;
                     }
                 }
             }
         } catch (IOException e) {
             e.printStackTrace();
+            System.out.println("authorize");
         }
     }
 
@@ -122,6 +133,7 @@ public class Handler {
             out.writeUTF(msg);
         } catch (IOException e) {
             e.printStackTrace();
+            System.out.println("send + IOException");
         }
     }
 
@@ -129,7 +141,59 @@ public class Handler {
         return handlerThread;
     }
 
+    public Handler getHandler() {return this;}
+
     public String getUser() {
         return user;
+    }
+
+    public boolean isAuthorized() {
+        return isAuthorized;
+    }
+
+    private void shutDown() {
+        try {
+            server.finalMessage(getHandler()); //Передает сообщение о разрыве соединения клиенту
+            System.out.println("finalMessage");//Log
+            in.close();
+            out.close();
+            if (socket != null && !socket.isClosed()) {socket.close();}
+            System.out.println(" The socket is closed");
+            if(!handlerThread.isInterrupted()) {handlerThread.interrupt();}
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Something wrong with the shutdown");
+
+        }
+
+    }
+
+    class DaemonThread implements Runnable { //параллельный поток следит за временем активности сессии и закрывает если есть первышение
+        private final int secondsOfWaiting = 120;
+        @Override
+        public void run() {
+            System.out.println("Daemon starts working");//Log
+            awaitingOfAuthorizing(secondsOfWaiting);
+            //System.out.println("awaitingOfAuthorization is complete");//Log
+
+        }
+
+        private void awaitingOfAuthorizing(int seconds) {
+            int counter = 0;
+            while (counter < seconds) {
+                if (isAuthorized()) {
+                    return;
+                }
+                try {
+                    Thread.sleep(1000);
+                    if (counter % 10 == 0) {System.out.println("Estimated " + (secondsOfWaiting - counter ) + " seconds.");}
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    System.out.println("DaemonThread exception");
+                }
+                counter++;
+            }
+            shutDown();
+        }
     }
 }
