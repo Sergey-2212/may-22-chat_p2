@@ -15,11 +15,11 @@ public class InMemoryUserServiceImpl implements UserService {
 
     private Connection connection;
     private Statement statement;
-    private List<User> users;
+    //private List<User> users;
 
-    public InMemoryUserServiceImpl() {
-        this.users = new ArrayList<>();
-    }
+//    public InMemoryUserServiceImpl() {
+//        this.users = new ArrayList<>();
+//    }
 
     @Override
     public void start() {
@@ -75,7 +75,9 @@ public class InMemoryUserServiceImpl implements UserService {
         try {
             ResultSet result = statement.executeQuery(
                     String.format("SELECT nickname FROM chatusers WHERE login = '%s' and pass = '%s'", login, password));
-            return result.getString(1);
+            String nick = result.getString(1);
+                result.close();
+            return nick;
         } catch (SQLException e) {
             e.printStackTrace();
             throw new WrongCredentialsException("Wrong login or password!");
@@ -138,9 +140,13 @@ public class InMemoryUserServiceImpl implements UserService {
         try {
             ResultSet result = statement.executeQuery(String.format
                     ("SELECT nickname FROM chatusers WHERE nickname = '%s'", newNick));
-            return (result.getString(1).equals(newNick));
+            String reqestresult = result.getString(1);
+            boolean compareResult = reqestresult.equals(newNick);
+            result.close();
+            return compareResult;
         } catch (SQLException e) {
             e.printStackTrace();
+            System.out.println("isNickBusy made exception.");
         }
         return false;
     }
@@ -162,6 +168,7 @@ public class InMemoryUserServiceImpl implements UserService {
             if (result.getString(1).equals(login)) {
                 statement.execute(String.format("UPDATE chatusers SET pass = '%s' WHERE pass = '%s' and login = '%s'", newPassword, oldPassword, login));//@TODO
             }
+            result.close();
         } catch (SQLException e) {
             e.printStackTrace();
             throw new WrongCredentialsException("Wrong login or password");

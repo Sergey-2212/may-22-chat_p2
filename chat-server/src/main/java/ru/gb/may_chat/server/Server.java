@@ -52,7 +52,7 @@ public class Server {
     }
 
     public void privateMessage(String from, String to, String message) {
-        String msg = PRIVATE_MESSAGE.getCommand() + REGEX + String.format("[%s][to %s]: %s", from, to, message);
+        String msg = PRIVATE_MESSAGE.getCommand() + REGEX + String.format("[%s]=>[%s]: %s", from, to, message);
         for (Handler handler : handlers) {
             if (handler.getUser().equals(from) || handler.getUser().equals(to)) {
                 handler.send(msg);
