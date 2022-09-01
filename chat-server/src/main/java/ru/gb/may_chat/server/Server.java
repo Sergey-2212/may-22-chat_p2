@@ -9,6 +9,8 @@ import java.net.Socket;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static ru.gb.may_chat.constants.MessageConstants.REGEX;
@@ -17,8 +19,9 @@ import static ru.gb.may_chat.enums.Command.*;
 public class Server {
     private final int port;
     private List<Handler> handlers;
-
     private UserService userService;
+
+    private Executor thpool = Executors.newFixedThreadPool(2);
 
     public Server(UserService userService) {
         this.userService = userService;
@@ -35,7 +38,8 @@ public class Server {
                 Socket socket = serverSocket.accept();
                 System.out.println("Client connected");
                 Handler handler = new Handler(socket, this);
-                handler.handle();
+                thpool.execute(handler.handle());
+
             }
         } catch (IOException e) {
             e.printStackTrace();
