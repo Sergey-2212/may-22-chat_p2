@@ -13,6 +13,7 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
+import ru.gb.may_chat.client.history.HistoryController;
 import ru.gb.may_chat.client.net.MessageProcessor;
 import ru.gb.may_chat.client.net.NetworkService;
 import ru.gb.may_chat.enums.Command;
@@ -75,6 +76,8 @@ public class ChatController implements Initializable, MessageProcessor {
 
     private String user;
 
+    private HistoryController historyController;
+
     public void mockAction(ActionEvent actionEvent) {
         System.out.println("mock");
     }
@@ -99,10 +102,13 @@ public class ChatController implements Initializable, MessageProcessor {
             String recipient = contacts.getSelectionModel().getSelectedItem();
             if (recipient.equals(BROADCAST_CONTACT)) {
                 networkService.sendMessage(BROADCAST_MESSAGE.getCommand() + REGEX + text);
+                historyController.writeBroadcastmsg(text, user);
             } else {
                 networkService.sendMessage(PRIVATE_MESSAGE.getCommand() + REGEX + recipient + REGEX + text);
+                historyController.writePrivatemsg(text, user, recipient);
             }
             inputField.clear();
+
         } catch (IOException e) {
             showError("Network error");
         }
@@ -148,11 +154,20 @@ public class ChatController implements Initializable, MessageProcessor {
                 case LIST_USERS -> parseUsers(split);
                 case CHANGE_NICK_OK -> handleChangeNick(split[1]);
                 case CLOSE_SESSION_MESSAGE -> showCloseWarning(); // Сообщение о закрытии
-                default -> chatArea.appendText(split[1] + System.lineSeparator());
+                default -> {chatArea.appendText(split[1] + System.lineSeparator());
+                    try {
+                        historyController.writeInputmsg(split[1]);
+                    } catch (IOException e) {
+                        showError("Message logging is disabled!");
+                    }
+                }
+
             }
     }
 
     private void handleChangeNick(String newNick) {
+        String oldnickname = user;
+        historyController.changeFilename(oldnickname, newNick);
         user = newNick;
         returnToChat(null);
     }
@@ -161,6 +176,7 @@ public class ChatController implements Initializable, MessageProcessor {
         try {
             networkService.shutdown();
             Platform.exit();
+            historyController.stop();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -180,6 +196,15 @@ public class ChatController implements Initializable, MessageProcessor {
         user = split[1];
         loginPanel.setVisible(false);
         mainPanel.setVisible(true);
+        System.out.println("The user variable = " + user);
+        historyController = new HistoryController(user);
+
+        try {
+            chatArea.appendText(historyController.getlasthistory(100));
+        } catch (IOException e) {
+            showError("Chathistory is not available.");
+        }
+
     }
 
     public void sendChangeNick(ActionEvent actionEvent) {

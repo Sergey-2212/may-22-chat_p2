@@ -10,6 +10,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import static ru.gb.may_chat.constants.MessageConstants.REGEX;
 import static ru.gb.may_chat.enums.Command.AUTH_MESSAGE;
@@ -28,6 +30,8 @@ public class Handler {
     private String user;
     private boolean isAuthorized;
 
+
+
     public Handler(Socket socket, Server server) {
         try {
             this.server = server;
@@ -41,7 +45,7 @@ public class Handler {
         }
     }
 
-    public void handle() {
+    public Runnable handle() {
         handlerThread = new Thread(() -> {
             authorize();
             if (!Thread.currentThread().isInterrupted() && !socket.isClosed()) {
@@ -58,7 +62,9 @@ public class Handler {
                 }
             }
         });
-        handlerThread.start();
+
+
+        return handlerThread;
     }
 
     private void parseMessage(String message) {
