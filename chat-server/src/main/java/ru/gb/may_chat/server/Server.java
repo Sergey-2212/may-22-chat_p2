@@ -1,5 +1,7 @@
 package ru.gb.may_chat.server;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import ru.gb.may_chat.props.PropertyReader;
 import ru.gb.may_chat.server.service.UserService;
 
@@ -20,8 +22,9 @@ public class Server {
     private final int port;
     private List<Handler> handlers;
     private UserService userService;
-
     private Executor thpool = Executors.newFixedThreadPool(2);
+
+    private Logger logger = LogManager.getLogger(Server.class);
 
     public Server(UserService userService) {
         this.userService = userService;
@@ -31,17 +34,21 @@ public class Server {
 
     public void start() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Server start!");
+            //System.out.println("Server is started!");
+            logger.info("Server is started!");
             userService.start();
             while (true) {
-                System.out.println("Waiting for connection......");
+                //System.out.println("Waiting for connection......");
+                logger.info("Waiting for connection.");
                 Socket socket = serverSocket.accept();
-                System.out.println("Client connected");
+                //System.out.println("Client connected");
                 Handler handler = new Handler(socket, this);
+                logger.info(String.format("Handler %s connected", handler.getHandler()));
                 thpool.execute(handler.handle());
 
             }
         } catch (IOException e) {
+            logger.error("Server's starting ERROR");
             e.printStackTrace();
         } finally {
             shutdown();
