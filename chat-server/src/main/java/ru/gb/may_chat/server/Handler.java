@@ -1,25 +1,22 @@
 package ru.gb.may_chat.server;
 
-import ru.gb.may_chat.constants.MessageConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import ru.gb.may_chat.enums.Command;
 import ru.gb.may_chat.server.error.NickAlreadyIsBusyException;
 import ru.gb.may_chat.server.error.WrongCredentialsException;
+
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
-import java.net.SocketException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import static ru.gb.may_chat.constants.MessageConstants.REGEX;
 import static ru.gb.may_chat.enums.Command.AUTH_MESSAGE;
 import static ru.gb.may_chat.enums.Command.AUTH_OK;
-import static ru.gb.may_chat.enums.Command.BROADCAST_MESSAGE;
 import static ru.gb.may_chat.enums.Command.CHANGE_NICK_OK;
 import static ru.gb.may_chat.enums.Command.ERROR_MESSAGE;
-import static ru.gb.may_chat.enums.Command.PRIVATE_MESSAGE;
 
 public class Handler {
     private Socket socket;
@@ -29,6 +26,7 @@ public class Handler {
     private Server server;
     private String user;
     private boolean isAuthorized;
+    private Logger logger = LogManager.getLogger(Handler.class);
 
 
 
@@ -39,9 +37,10 @@ public class Handler {
             this.in = new DataInputStream(socket.getInputStream());
             this.out = new DataOutputStream(socket.getOutputStream());
             this.isAuthorized = false;
-            System.out.println("Handler is created");
+            logger.info(String.format("Handler %s is created", this.getHandler()));
         } catch (IOException e) {
-            System.err.println("Connection problems with user: " + user);
+            //System.err.println("Connection problems with user: " + user);
+            logger.error(String.format("Connection problems with user:  %s",user));
         }
     }
 
@@ -49,14 +48,16 @@ public class Handler {
         handlerThread = new Thread(() -> {
             authorize();
             if (!Thread.currentThread().isInterrupted() && !socket.isClosed()) {
-                System.out.println("Auth done");
+                //System.out.println("Auth done");
+                logger.info(String.format("User %s is authorused.",user));
             }
             while (!Thread.currentThread().isInterrupted() && !socket.isClosed()) {
                 try {
                     String message = in.readUTF();
                     parseMessage(message);
                 } catch (IOException e) {
-                    System.out.println("Connection broken with client: " + user);
+                    logger.info(String.format("Connection broken with client: %s", user));
+                    //System.out.println("Connection broken with client: " + user);
                     server.removeHandler(this);
                     Thread.currentThread().interrupt();
                 }
@@ -75,7 +76,7 @@ public class Handler {
             case BROADCAST_MESSAGE -> server.broadcast(user, split[1]);
             case PRIVATE_MESSAGE -> server.privateMessage(user, split[1], split[2]);
             case CHANGE_NICK -> changeNick(split[1]);
-            default -> System.out.println("Unknown message " + message);
+            default -> logger.warn(String.format("Unknown message: %s",message));
         }
     }
 
@@ -91,11 +92,12 @@ public class Handler {
     }
 
     private void authorize() {
-        System.out.println("Authorizing");
+        //System.out.println("Authorizing");
+        logger.info(String.format("Handler {%s} authorizing has started",user));
         Thread daemon = new Thread(new DaemonThread());
         daemon.setDaemon(true);
         daemon.start();
-        System.out.println("Daemon started");
+        logger.info(String.format("%s Daemon is started.", this));
         try {
             while (!socket.isClosed()) {
                 String msg = in.readUTF();
@@ -108,19 +110,22 @@ public class Handler {
                         nickname = server.getUserService().authenticate(parsed[1], parsed[2]);
                     } catch (WrongCredentialsException e) {
                         response = ERROR_MESSAGE.getCommand() + REGEX + e.getMessage();
-                        System.out.println("Wrong credentials: " + parsed[1]);
+                        logger.info(String.format("Wrong credentials: %s",parsed[1]));
+                        //System.out.println("Wrong credentials: " + parsed[1]);
                     }
                     
                     if (server.isUserAlreadyOnline(nickname)) {
                         response = ERROR_MESSAGE.getCommand() + REGEX + "This client already connected";
-                        System.out.println("Already connected");
+                        //System.out.println("Already connected");
+                        logger.info(String.format("User %s is already connected",user));
                     }
+
                     
                     if (!response.equals("")) {
                         send(response);
                     } else {
-                        System.out.println("Auth ok");
                         this.user = nickname;
+                        logger.info(String.format("User %s has successfully authorised.", user));
                         send(AUTH_OK.getCommand() + REGEX + nickname);
                         server.addHandler(this);
                         this.isAuthorized = true;
@@ -130,7 +135,8 @@ public class Handler {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("authorize");
+            //System.out.println("authorize");
+            logger.warn("authorize");
         }
     }
 
@@ -139,7 +145,8 @@ public class Handler {
             out.writeUTF(msg);
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("send + IOException");
+            logger.error(String.format("Error with message sending: %s", msg), this::getHandler);
+            //System.out.println("send + IOException");
         }
     }
 
@@ -160,15 +167,18 @@ public class Handler {
     private void shutDown() {
         try {
             server.finalMessage(getHandler()); //Передает сообщение о разрыве соединения клиенту
-            System.out.println("finalMessage");//Log
+            //System.out.println("finalMessage");//Log
+            logger.info(String.format("Shutdown message for client: ",user));
             in.close();
             out.close();
             if (socket != null && !socket.isClosed()) {socket.close();}
-            System.out.println(" The socket is closed");
+            //System.out.println("The socket is closed");
+            logger.info(String.format("Socket is closed fo user - %s",user));
             if(!handlerThread.isInterrupted()) {handlerThread.interrupt();}
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("Something wrong with the shutdown");
+            logger.error(String.format("Something wrong with the shutdown of [%s]",user));
+            //System.out.println("Something wrong with the shutdown");
 
         }
 
@@ -178,8 +188,9 @@ public class Handler {
         private final int secondsOfWaiting = 120;
         @Override
         public void run() {
-            System.out.println("Daemon starts working");//Log
+            logger.info("Daemon thread starts working", Handler.this::getHandler);
             awaitingOfAuthorizing(secondsOfWaiting);
+            logger.info("awaitingOfAuthorization is complete", Handler.this::getHandler);
             //System.out.println("awaitingOfAuthorization is complete");//Log
 
         }
@@ -195,7 +206,8 @@ public class Handler {
                     if (counter % 10 == 0) {System.out.println("Estimated " + (secondsOfWaiting - counter ) + " seconds.");}
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                    System.out.println("DaemonThread exception");
+                    //System.out.println("DaemonThread exception");
+                    logger.error("DaemonThread InterruptedException", Handler.this::getHandler);
                 }
                 counter++;
             }
